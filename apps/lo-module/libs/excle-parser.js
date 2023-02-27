@@ -63,21 +63,31 @@ async function extractDataFromExcel(rules, fileBuffer) {
         // ================================================================
 
         let transformedData = [];
+        let splitTables = {};
 
         for (let j = 0; j < selectedData.length; j++) {
             let row = selectedData[j];
             
             const transformRules = rulesForSheet.filter(rule => rule['rule'] && !rule['onnew']);
             let newRow = {};
+            let newTableRow = {};
             let excludeCols = [];
 
             for (let k = 0; k < transformRules.length; k++) {
                 const ruleV = transformRules[k].rule.replaceAll(' ', '');
 
                 if (ruleV.match(/[\w]+/g)[1] === ruleV.split('=')[1]) {
-                    newRow[ruleV.split('=')[0]] = row[ruleV.split('=')[1]];
+                    const newTableName = ruleV.split('=')[0].split('.').length === 2 ? ruleV.split('=')[0].split('.')[0] : null;
+                    const newColName = ruleV.split('=')[0].split('.').length === 2 ? ruleV.split('=')[0].split('.')[1] : ruleV.split('=')[0];
 
-                    if (!excludeCols.includes(ruleV.split('=')[1])) excludeCols.push(ruleV.split('=')[1]);
+                    if (!newTableName) {
+                        newRow[newColName] = row[ruleV.split('=')[1]];
+
+                        if (!excludeCols.includes(ruleV.split('=')[1])) excludeCols.push(ruleV.split('=')[1]);
+                    } else {
+                        if (!newTableRow[newTableName]) newTableRow[newTableName] = {}
+                        newTableRow[newTableName][newColName] = row[ruleV.split('=')[1]];
+                    }
                 }
 
                 if (ruleV.includes('split(')) {
@@ -150,6 +160,11 @@ async function extractDataFromExcel(rules, fileBuffer) {
             });
             newRow = { ...row, ...newRow };
             transformedData.push(newRow);
+
+            Object.keys(newTableRow).forEach(tableName => {
+                if (!splitTables[tableName]) splitTables[tableName] = [];
+                splitTables[tableName].push(newTableRow[tableName]);
+            });
         }
 
         // ================================================================
@@ -192,30 +207,61 @@ async function extractDataFromExcel(rules, fileBuffer) {
         }
 
         // Loading to DB
-        const colNames = Object.keys(transformedData[0]);
 
-        await knex.schema.createTable(sheetName, table => {
-            colNames.forEach(colName => {
-                let colDataType = '';
+        if (Object.keys(splitTables).length > 0) {
+            const tableNames = Object.keys(splitTables);
+
+            for (let j = 0; j < tableNames.length; j++) {
+                const colNames = Object.keys(splitTables[tableNames[j]][0]);
+                await knex.schema.createTable(tableNames[j], table => {
+                    colNames.forEach(colName => {
+                        let colDataType = '';
     
-                switch (typeof transformedData[0][colName]) {
-                    case 'number':
-                        if (colName === 'id') {
-                            colDataType = 'increments';
-                        } else {
-                            colDataType = Number.isInteger(transformedData[0][colName]) ? 'integer' : 'float';
+                        switch (typeof transformedData[0][colName]) {
+                            case 'number':
+                                if (colName === 'id') {
+                                    colDataType = 'increments';
+                                } else {
+                                    colDataType = Number.isInteger(transformedData[0][colName]) ? 'integer' : 'float';
+                                }
+                                break;
+                            default:
+                                colDataType = 'string';
+                                break;
                         }
-                        break;
-                    default:
-                        colDataType = 'string';
-                        break;
-                }
     
-                table[colDataType](colName);
-            });
-        });
+                        table[colDataType](colName);
+                    });
+                });
 
-        await knex(sheetName).insert(transformedData);
+                await knex(tableNames[j]).insert(splitTables[tableNames[j]]);
+            }
+        } else {
+            const colNames = Object.keys(transformedData[0]);
+
+            await knex.schema.createTable(sheetName, table => {
+                colNames.forEach(colName => {
+                    let colDataType = '';
+
+                    switch (typeof transformedData[0][colName]) {
+                        case 'number':
+                            if (colName === 'id') {
+                                colDataType = 'increments';
+                            } else {
+                                colDataType = Number.isInteger(transformedData[0][colName]) ? 'integer' : 'float';
+                            }
+                            break;
+                        default:
+                            colDataType = 'string';
+                            break;
+                    }
+
+                    table[colDataType](colName);
+                });
+            });
+
+            await knex(sheetName).insert(transformedData);
+        }
 
         // ================================================================
 
