@@ -270,57 +270,24 @@ async function extractDataFromExcel(rules, fileBuffer) {
         const joinRules = rulesForSheet.filter(rule => rule['rule'] && rule['table']);
 
         for (let j = 0; j < joinRules.length; j++) {
-            // const operators = joinRules[j]['rule'].replaceAll(/(?=\().+?(?<=\))/g, '').match(/[\w]+/g);
-            
             const ruleParts = joinRules[j]['rule'].match(/(?<=\().+?(?=\))/g);
 
             const joinTables = ruleParts[0].replaceAll(' ', '').split(',');
-            const joinOn = ruleParts[1].replaceAll(' ', '').split('=');
-            const joinFields = ruleParts[2].replaceAll(' ', '').split(',');
+            const joinOn = ruleParts[1];
+            const joinFields = ruleParts[2].replaceAll(' ', '').split(',').map(el => `${el.split('=')[1]} as ${el.split('=')[0]}`);
 
-            let selectQueries = {};
-            let tablesLength = [];
-
-            for (let k = 0; k < joinTables.length; k++) {
-                const query = await knex(joinTables[k]).select('*');
-                selectQueries[joinTables[k]] = query;
-                tablesLength.push(query.length);
-            }
-
-            let newTableData = [];
-            for (let k = 0; k < Math.min(...tablesLength); k++) {
-                let newRow = {};
-
-                joinFields.map(el => el.split('=')[0]).forEach((colName, index) => {
-                    const rParts = joinFields[index].split('=')[1].split('+');
-
-                    let value = null;
-
-                    rParts.forEach(part => {
-                        if (value === null) {
-                            value = selectQueries[part.split('.')[0]][k][part.split('.')[1]];
-                        } else {
-                            value += selectQueries[part.split('.')[0]][k][part.split('.')[1]];
-                        }
-                    });
-
-                    newRow[colName] = value;
-                });
-
-                newTableData.push(newRow);
-            }
-
-            const colNames = Object.keys(newTableData[0]);
+            const query = await knex.raw(`SELECT ${joinFields.join()} FROM ${joinTables[0]} INNER JOIN ${joinTables[1]} ON ${joinOn};`);
+            const colNames = Object.keys(query[0]);
             await knex.schema.createTable(joinRules[j]['table'], table => {
                 colNames.forEach(colName => {
                     let colDataType = '';
 
-                    switch (typeof newTableData[0][colName]) {
+                    switch (typeof query[0][colName]) {
                         case 'number':
                             if (colName === 'id') {
                                 colDataType = 'increments';
                             } else {
-                                colDataType = Number.isInteger(newTableData[0][colName]) ? 'integer' : 'float';
+                                colDataType = Number.isInteger(query[0][colName]) ? 'integer' : 'float';
                             }
                             break;
                         default:
@@ -332,8 +299,11 @@ async function extractDataFromExcel(rules, fileBuffer) {
                 });
             });
 
-            await knex(joinRules[j]['table']).insert(newTableData);
+            await knex(joinRules[j]['table']).insert(query);
         }
+
+        // ================================================================
+
     }
 }
 
