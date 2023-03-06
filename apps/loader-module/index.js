@@ -13,12 +13,12 @@ async function upload() {
             method: 'POST',
             body: formData,
         });
-        const result = await response.json();
-        console.log(JSON.stringify(result));
-        alert('Успех!')
+        // const result = await response.json();
+        // console.log(JSON.stringify(result));
+        // alert('Успех!')
     } catch (error) {
         console.error(error);
-        alert('Ошибка!')
+        // alert('Ошибка!')
     }
 }
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 
-const extractDataFromExcel = require('../libs/excle-parser');
+const extractDataFromExcel = require('../libs/rulelib');
 
 const router = express.Router();
 
@@ -12,10 +12,9 @@ router.post('/', async (req, res) => {
     // TODO: валидировать входные данные
     const rules = eval(req.body.rules);
     const file = req.file;
-    
-    extractDataFromExcel(file.buffer, rules);
 
-    return res.send({rules, file: file.originalname});
+    // return res.send({ ok: true });
+    return res.send(await extractDataFromExcel(rules, file.buffer));
 });
 
 module.exports = router;
