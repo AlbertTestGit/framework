@@ -15,6 +15,8 @@ async function extractDataFromExcel(rules, fileBuffer) {
     const workbook = XLSX.read(fileBuffer, { cellDates: true });
     const sheetNames = workbook.SheetNames;
 
+    let sheetNameIndex = 0;
+
     if (!Array.isArray(rules[0])) rules = [rules];
 
     for (let i = 0; i < rules.length; i++) {
@@ -22,10 +24,11 @@ async function extractDataFromExcel(rules, fileBuffer) {
         console.log(`#${i}`);
 
         const rulesForSheet = rules[i];
-        const sheetName = rulesForSheet.filter(rule => 'sheet' in rule)[0]?.['sheet'] || sheetNames[i];
+        const sheetName = rulesForSheet.filter(rule => 'sheet' in rule)[0]?.['sheet'] || sheetNames[sheetNameIndex];
         const worksheet = workbook.Sheets[sheetName];
 
         const selectRules = rulesForSheet.filter(rule => ('take' in rule) || ('skip' in rule) || ('usecols' in rule));
+        sheetNameIndex += selectRules.length > 0 ? 1 : 0;
         let data = extractData(selectRules, worksheet);
 
 
@@ -34,7 +37,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
             const rule = nonSelectRules[j];
 
             // Преобразование имен полей
-            if (!(Array.isArray(rule)) && !('onnew' in rule)) {
+            if (!(Array.isArray(rule)) && !('onnew' in rule) && !Object.keys(rule)[0].includes('.')) {
                 // TODO
                 console.log(j, rule, 'transform');
 
@@ -142,6 +145,70 @@ async function extractDataFromExcel(rules, fileBuffer) {
                         newRow[newColName] = null;
                         delete row[args[3]];
                     }
+                }
+            }
+
+            if (!(Array.isArray(rule)) && !('onnew' in rule) && Object.keys(rule)[0].includes('.')) {
+                // TODO
+                console.log(j, rule, 'split');
+
+                const toTC = Object.keys(rule)[0].split('.');
+                const fromTC = rule[Object.keys(rule)[0]].split('.');
+
+                const query = await knex(fromTC[0]).select(fromTC[1]);
+
+                if (await knex.schema.hasTable(toTC[0])) {
+                    const q = await knex(toTC[0]).select('*');
+
+                    await knex.schema.table(toTC[0], table => {
+                        let colDataType = '';
+    
+                        switch (typeof query[0][fromTC[1]]) {
+                            case 'number':
+                                if (toTC[1] === 'id') {
+                                    colDataType = 'increments';
+                                } else {
+                                    colDataType = Number.isInteger(q[0][fromTC[1]]) ? 'integer' : 'float';
+                                }
+                                break;
+                            default:
+                                colDataType = 'string';
+                                break;
+                        }
+    
+                        table[colDataType](toTC[1]);
+                    });
+
+                    for (let k = 0; k < q.length; k++) {
+                        let whereQ = [];
+                        Object.keys(q[k]).forEach(field => whereQ.push(`${field}='${q[k][field]}'`));
+
+                        const nc = Object.keys(query[k])[0]
+                        await knex.raw(`UPDATE ${toTC[0]} SET ${nc}='${query[k][nc]}' WHERE ${whereQ.join(' AND ')}`);
+                        // await knex(toTC[0]).where(whereQ.join(' AND ')).update({ ...q[k], ...query[k] });
+                        // await knex(toTC[0]).where(whereQ.join(' AND ')).update(query[k]);
+                    }
+                } else {
+                    await knex.schema.createTable(toTC[0], table => {
+                        let colDataType = '';
+    
+                        switch (typeof query[0][fromTC[1]]) {
+                            case 'number':
+                                if (toTC[1] === 'id') {
+                                    colDataType = 'increments';
+                                } else {
+                                    colDataType = Number.isInteger(q[0][fromTC[1]]) ? 'integer' : 'float';
+                                }
+                                break;
+                            default:
+                                colDataType = 'string';
+                                break;
+                        }
+    
+                        table[colDataType](toTC[1]);
+                    });
+
+                    await knex(toTC[0]).insert(query);
                 }
             }
         }
