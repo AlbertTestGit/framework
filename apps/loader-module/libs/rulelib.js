@@ -10,6 +10,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
         connection: {
             filename: './app.db',
         },
+        useNullAsDefault: true,
     });
 
     const workbook = XLSX.read(fileBuffer, { cellDates: true });
@@ -37,7 +38,18 @@ async function extractDataFromExcel(rules, fileBuffer) {
             const rule = nonSelectRules[j];
 
             // Преобразование имен полей
-            if (!(Array.isArray(rule)) && !('onnew' in rule) && !Object.keys(rule)[0].includes('.') && !('table' in rule) && !('join' in rule) && !('fields' in rule)) {
+            if (
+                !(Array.isArray(rule))
+                && !('onnew' in rule)
+                && !Object.keys(rule)[0].includes('.')
+                && !('table' in rule)
+                && !('join' in rule)
+                && !('fields' in rule)
+                && !('to_table' in rule)
+                && !('from_table' in rule)
+                && !('key_fields' in rule)
+                && !('onduplicate' in rule)
+            ) {
                 // TODO
                 console.log(j, rule, 'transform');
 
@@ -216,7 +228,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
             // Слияние таблиц
             if (!(Array.isArray(rule)) && 'table' in rule && 'join' in rule && 'fields' in rule) {
                 // TODO
-                console.log(j, rule, 'split');
+                console.log(j, rule, 'join');
 
                 const fields = Object.keys(rule.fields).map(fieldName => `${rule.fields[fieldName]} as ${fieldName}`);
                 const tables = rule.join.replaceAll(' ', '').split('=').map(item => item.split('.')[0]);
@@ -251,7 +263,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
             }
         }
 
-        console.log(data)
+        // console.log(data)
         // Load to DB
         if (data.length > 0) {
             const colNames = Object.keys(data[0]);
