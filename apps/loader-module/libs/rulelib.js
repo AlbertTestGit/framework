@@ -37,7 +37,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
             const rule = nonSelectRules[j];
 
             // Преобразование имен полей
-            if (!(Array.isArray(rule)) && !('onnew' in rule) && !Object.keys(rule)[0].includes('.')) {
+            if (!(Array.isArray(rule)) && !('onnew' in rule) && !Object.keys(rule)[0].includes('.') && !('table' in rule) && !('join' in rule) && !('fields' in rule)) {
                 // TODO
                 console.log(j, rule, 'transform');
 
@@ -148,6 +148,7 @@ async function extractDataFromExcel(rules, fileBuffer) {
                 }
             }
 
+            // Разбивка таблиц
             if (!(Array.isArray(rule)) && !('onnew' in rule) && Object.keys(rule)[0].includes('.')) {
                 // TODO
                 console.log(j, rule, 'split');
@@ -209,6 +210,43 @@ async function extractDataFromExcel(rules, fileBuffer) {
                     });
 
                     await knex(toTC[0]).insert(query);
+                }
+            }
+
+            // Слияние таблиц
+            if (!(Array.isArray(rule)) && 'table' in rule && 'join' in rule && 'fields' in rule) {
+                // TODO
+                console.log(j, rule, 'split');
+
+                const fields = Object.keys(rule.fields).map(fieldName => `${rule.fields[fieldName]} as ${fieldName}`);
+                const tables = rule.join.replaceAll(' ', '').split('=').map(item => item.split('.')[0]);
+
+                const query = await knex.raw(`SELECT ${fields.join()} FROM ${tables[0]} INNER JOIN ${tables[1]} ON ${rule.join};`);
+                
+                if (query.length > 0) {
+                    const colNames = Object.keys(query[0]);
+                    await knex.schema.createTable(rule.table, table => {
+                        colNames.forEach(colName => {
+                            let colDataType = '';
+
+                            switch (typeof query[0][colName]) {
+                                case 'number':
+                                    if (colName === 'id') {
+                                        colDataType = 'increments';
+                                    } else {
+                                        colDataType = Number.isInteger(query[0][colName]) ? 'integer' : 'float';
+                                    }
+                                    break;
+                                default:
+                                    colDataType = 'string';
+                                    break;
+                            }
+
+                            table[colDataType](colName);
+                        });
+                    });
+
+                    await knex(rule.table).insert(query);
                 }
             }
         }
