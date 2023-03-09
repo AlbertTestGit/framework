@@ -21,9 +21,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
     if (!Array.isArray(rules[0])) rules = [rules];
 
     for (let i = 0; i < rules.length; i++) {
-        // TODO
-        console.log(`#${i}`);
-
         const rulesForSheet = rules[i];
         const sheetName = rulesForSheet.filter(rule => 'sheet' in rule)[0]?.['sheet'] || sheetNames[sheetNameIndex];
         const worksheet = workbook.Sheets[sheetName];
@@ -51,9 +48,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
                     && !('key_fields' in rule)
                     && !('onduplicate' in rule)
                 ) {
-                    // TODO
-                    console.log(j, rule, 'transform');
-
                     const newColNames = Object.keys(rule);
                     let excludeCols = [];
 
@@ -95,9 +89,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                 // Проверка типов и ограничений
                 if (Array.isArray(rule) && rule.length > 0 && typeof rule[0] === 'string') {
-                    // TODO
-                    console.log(j, rule, 'check');
-
                     let expResForRowArr = [];
 
                     data.forEach((row, rowIndex) => {
@@ -128,9 +119,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                 // Замена значение-код / код-значение
                 if (!(Array.isArray(rule)) && 'onnew' in rule) {
-                    // TODO
-                    console.log(j, rule, 'replace');
-
                     const newColName = Object.keys(rule).filter(key => key !== 'onnew')[0];
 
                     const args = rule[newColName].match(/[\w]+/g);
@@ -164,9 +152,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                 // Разбивка таблиц
                 if (!(Array.isArray(rule)) && !('onnew' in rule) && Object.keys(rule)[0].includes('.')) {
-                    // TODO
-                    console.log(j, rule, 'split');
-
                     const toTC = Object.keys(rule)[0].split('.');
                     const fromTC = rule[Object.keys(rule)[0]].split('.');
 
@@ -200,8 +185,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                             const nc = Object.keys(query[k])[0]
                             await knex.raw(`UPDATE ${toTC[0]} SET ${nc}='${query[k][nc]}' WHERE ${whereQ.join(' AND ')}`);
-                            // await knex(toTC[0]).where(whereQ.join(' AND ')).update({ ...q[k], ...query[k] });
-                            // await knex(toTC[0]).where(whereQ.join(' AND ')).update(query[k]);
                         }
                     } else {
                         await knex.schema.createTable(toTC[0], table => {
@@ -229,9 +212,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                 // Слияние таблиц
                 if (!(Array.isArray(rule)) && 'table' in rule && 'join' in rule && 'fields' in rule) {
-                    // TODO
-                    console.log(j, rule, 'join');
-
                     const fields = Object.keys(rule.fields).map(fieldName => `${rule.fields[fieldName]} as ${fieldName}`);
                     const tables = rule.join.replaceAll(' ', '').split('=').map(item => item.split('.')[0]);
 
@@ -266,9 +246,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
                 // Тестовая заливка данных
                 if (!(Array.isArray(rule)) && 'to_table' in rule && 'from_table' in rule && 'key_fields' in rule) {
-                    // TODO
-                    console.log(j, rule, 'upload');
-
                     if (rule.clear === true) {
                         await knex.schema.dropTable(rule.to_table);
 
@@ -356,7 +333,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
             }
         }
 
-        // console.log(data)
         // Load to DB
         if (data.length > 0) {
             const colNames = Object.keys(data[0]);
@@ -383,9 +359,6 @@ async function extractDataFromExcel(rules, fileBuffer) {
 
             await knex(sheetName).insert(data);
         }
-
-        // TODO
-        console.log('\n')
     }
 }
 
